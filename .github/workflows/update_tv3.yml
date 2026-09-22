@@ -1,0 +1,51 @@
+name: Auto Update TV3 M3U8
+
+on:
+  schedule:
+    # Dijalankan secara automatik setiap 6 jam
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Butang untuk jalankan secara manual di GitHub
+
+jobs:
+  generate-m3u8:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Fetch & Generate tv3.m3u8
+        run: |
+          # 1. Ambil data JSON dan nyahkod triple base64
+          RAW_RESPONSE=$(curl -s "https://tv3live.my/wp-json/media-hub/v1/bootstrap?provider=tonton&channel=tv3&quality=main" \
+            -H "Referer: https://tv3live.my/tv3/" \
+            -H "User-Agent: Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36")
+
+          # 2. Ekstrak URL .m3u8 yang bersih
+          STREAM_URL=$(echo "$RAW_RESPONSE" | tr -d '"' | base64 -d | base64 -d | base64 -d | grep -oE 'https://[^"]+' | sed 's/\\//g')
+
+          # Pastikan URL berjaya diambil sebelum tulis ke fail
+          if [ -z "$STREAM_URL" ]; then
+            echo "Gagal mendapatkan STREAM_URL!"
+            exit 1
+          fi
+
+          echo "URL Ditemui: $STREAM_URL"
+
+          # 3. Format dan simpan terus ke fail tv3.m3u8
+          cat << EOF > tv3.m3u8
+#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=3405200,CODECS="avc1.4d001f,mp4a.40.2",RESOLUTION=1280x720
+$STREAM_URL
+EOF
+
+      - name: Commit & Push Update
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add tv3.m3u8
+          # Commit hanya jika ada perubahan pada fail
+          git commit -m "Update tv3.m3u8 stream URL [skip ci]" || exit 0
+          git push
+          
