@@ -18,22 +18,28 @@ jobs:
 
       - name: Fetch & Generate tv3.m3u8
         run: |
-          # Ambil data JSON dan nyahkod triple base64
-          RAW_RESPONSE=$(curl -s "https://tv3live.my/wp-json/media-hub/v1/bootstrap?provider=tonton&channel=tv3&quality=main" \
+          # 1. Ambil data REST API dengan User-Agent Chrome Desktop
+          RAW_RESPONSE=$(curl -sL "https://tv3live.my/wp-json/media-hub/v1/bootstrap?provider=tonton&channel=tv3&quality=main" \
             -H "Referer: https://tv3live.my/tv3/" \
-            -H "User-Agent: Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36")
+            -H "Origin: https://tv3live.my" \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
 
-          # Ekstrak URL .m3u8 yang bersih
-          STREAM_URL=$(echo "$RAW_RESPONSE" | tr -d '"' | base64 -d | base64 -d | base64 -d | grep -oE 'https://[^"]+' | sed 's/\\//g')
+          # 2. Nyahkod triple base64
+          DECODED_DATA=$(echo "$RAW_RESPONSE" | tr -d '"' | base64 -d 2>/dev/null | base64 -d 2>/dev/null | base64 -d 2>/dev/null)
 
+          # 3. Ekstrak URL .m3u8
+          STREAM_URL=$(echo "$DECODED_DATA" | grep -oE 'https://[^"]+' | sed 's/\\//g')
+
+          # Semakan sekiranya pembolehubah kosong
           if [ -z "$STREAM_URL" ]; then
+            echo "Kandungan asal yang diterima: $RAW_RESPONSE"
             echo "Gagal mendapatkan STREAM_URL!"
             exit 1
           fi
 
-          echo "URL Ditemui: $STREAM_URL"
+          echo "URL Berjaya Ditemui: $STREAM_URL"
 
-          # Tulis ke tv3.m3u8
+          # 4. Simpan terus ke tv3.m3u8
           echo "#EXTM3U" > tv3.m3u8
           echo '#EXT-X-STREAM-INF:BANDWIDTH=3405200,CODECS="avc1.4d001f,mp4a.40.2",RESOLUTION=1280x720' >> tv3.m3u8
           echo "$STREAM_URL" >> tv3.m3u8
